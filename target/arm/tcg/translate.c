@@ -8079,22 +8079,9 @@ static void arm_tr_tb_stop(DisasContextBase *dcbase, CPUState *cpu)
 #include "hooks/hook_engine.h"
 
 void armv7m_nvic_set_pending(NVICState *s, int irq, bool secure);
-void arm_sym_clear_reg(CPUARMState *env, unsigned reg);
 extern GHashTable *exit_at_htable;
 extern uint32_t bb_cnt;
 extern unsigned long aflPanicAddr;
-
-/*
- * Forget the symbolic value of a register that a hook wrote. Each TCG global's
- * expression slot is allocated right after the global itself (tcg.c).
- */
-void arm_sym_clear_reg(CPUARMState *env, unsigned reg)
-{
-    TCGTemp *expr = tcgv_i32_temp(cpu_R[reg]) + 1;
-
-    g_assert(expr->symbolic_expression);
-    *(void **)((char *)env + expr->mem_offset) = NULL;
-}
 
 /* Runs at each block start; returns 1 when a hook ran and PC now points elsewhere. */
 static uint32_t arm_helper_func(CPUState *cpu, uint64_t pc){
