@@ -1333,7 +1333,8 @@ static void riscv_cpu_init(Object *obj)
     env->misa_mxl = mcc->misa_mxl_max;
 
     memset(cpu->env_exprs, 0, sizeof(cpu->env_exprs));
-    _sym_register_expression_region(cpu->env_exprs, sizeof(cpu->env_exprs));
+    _sym_register_expression_region(cpu->env_exprs,
+                                    ARRAY_SIZE(cpu->env_exprs));
 #ifndef CONFIG_USER_ONLY
     qdev_init_gpio_in(DEVICE(obj), riscv_cpu_set_irq,
                       IRQ_LOCAL_MAX + IRQ_LOCAL_GUEST_MAX);

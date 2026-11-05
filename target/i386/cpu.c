@@ -8008,7 +8008,8 @@ static void x86_cpu_initfn(Object *obj)
     CPUX86State *env = &cpu->env;
 
     memset(cpu->env_exprs, 0, sizeof(cpu->env_exprs));
-    _sym_register_expression_region(cpu->env_exprs, sizeof(cpu->env_exprs));
+    _sym_register_expression_region(cpu->env_exprs,
+                                    ARRAY_SIZE(cpu->env_exprs));
 
     x86_cpu_init_default_topo(cpu);
 
