@@ -51,6 +51,9 @@
 #include "target/arm/cpu-qom.h"
 #include "target/arm/gtimer.h"
 
+#define SymExpr void*
+#include "RuntimeCommon.h"
+
 static void arm_cpu_set_pc(CPUState *cs, vaddr value)
 {
     ARMCPU *cpu = ARM_CPU(cs);
@@ -2585,6 +2588,18 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
             assert(dcz_blocklen >= 2 * TAG_GRANULE);
         }
     }
+
+    /*
+     * TCG stores each global's symbolic expression in env_exprs (see the
+     * sym_offset passed to tcg_init()). Register it with the SymCC garbage
+     * collector for every ARM CPU, M-profile included, so expressions held
+     * only in registers survive a collection. Do it at realize: the runtime
+     * cannot unregister a region, and QOM introspection creates and frees
+     * CPU objects that are never realized. The length counts elements.
+     */
+    memset(cpu->env_exprs, 0, sizeof(cpu->env_exprs));
+    _sym_register_expression_region(cpu->env_exprs,
+                                    ARRAY_SIZE(cpu->env_exprs));
 
     qemu_init_vcpu(cs);
     cpu_reset(cs);

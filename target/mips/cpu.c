@@ -41,7 +41,8 @@
 static void init_env_exprs(MIPSCPU *cpu)
 {
     memset(cpu->env_exprs, 0, sizeof(cpu->env_exprs));
-    _sym_register_expression_region(cpu->env_exprs, sizeof(cpu->env_exprs));
+    _sym_register_expression_region(cpu->env_exprs,
+                                    ARRAY_SIZE(cpu->env_exprs));
 }
 
 const char regnames[32][3] = {
