@@ -46,7 +46,7 @@ RUN <<EOF cat > /configure_symqemu.sh
       --disable-vte                                             \
       --disable-opengl                                          \
       --disable-virglrenderer                                   \
-      --target-list=x86_64-linux-user,riscv64-linux-user        \
+      --target-list=arm-softmmu                                 \
       --enable-debug                                            \
       --enable-debug-tcg                                        \
       --symcc-rt-llvm-version="$LLVM_VERSION"                   \
