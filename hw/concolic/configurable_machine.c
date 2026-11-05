@@ -22,7 +22,7 @@
 #include "hw/arm/boot.h"
 #include "hw/arm/armv7m.h"
 #include "target/arm/cpu.h"
-#include "hw/concolic/arm/function_hooks.h"
+#include "hooks/hook_engine.h"
 typedef ARMCPU THISCPU;
 #endif
 
@@ -37,7 +37,6 @@ typedef ARMCPU THISCPU;
 FILE* cov_fp = NULL;
 extern const char *covFile;
 extern const char *replayFile;
-GHashTable *patched_func_htable = NULL;
 GHashTable *exit_at_htable = NULL;
 
 uint8_t *fuzz = NULL;
@@ -45,8 +44,6 @@ uint32_t fuzz_size = 0;
 uint32_t fuzz_cursor = 0;
 static bool input_already_given = false;
 
-bool is_symbolize_at_mmio = false;
-bool is_symbolize_at_pc = false;
 unsigned long aflPanicAddr = (unsigned long)-1;
 
 bool getFuzz(uint8_t *buf, uint32_t size);
@@ -398,38 +395,9 @@ static void configure_mmio(QDict * mmio) {
         r->end   = mmio_end;
         g_ptr_array_add(mmio_ranges, r);
 
-        // if (qdict_haskey(mmio, "symbolize")) {
-        //         assert(qobject_type(qdict_get(mmio, "symbolize")) == QTYPE_QNUM);
-
-        //         is_symbolize_at_mmio |= qdict_get_int(mmio, "symbolize");
-        // }
-
-
-        /* by default, mmio symbilization is true whenever a mmio range is defined */
-        is_symbolize_at_mmio = true;
-
         // qemu_log_mask(LOG_CONCOLIC_REPLAY,
         // "[%s] mmio_start: 0x%x mmio_end: 0x%x \n", __func__, mmio_start, mmio_end);  
 
-}
-
-static void create_patch(QDict * patch_entry) {
-        if (!patched_func_htable) patched_func_htable = g_hash_table_new(NULL, NULL);
-
-        uint32_t addr = strtol(
-                        qstring_get_str(qobject_to(QString, qdict_get(patch_entry, "addr"))),
-                        NULL,
-                        0);
-        /*
-        "patch": [{"addr": "0x800xxxx", "name": "func1"},
-                {"addr": "0x800xxxx", "name": "func2"}]
-        */
-        void* element = NULL;
-        if(! (element = g_hash_table_lookup(patched_func_htable, (gpointer)((uint64_t)addr)))) {
-                if (qdict_haskey(patch_entry, "name"))
-                element = (void*)qstring_get_str(qobject_to(QString, qdict_get(patch_entry, "name")));
-                g_hash_table_insert(patched_func_htable, (gpointer)((uint64_t)addr), (gpointer)element);
-        }
 }
 
 static void create_exit_at(QDict * exit_at_entry) {
@@ -454,38 +422,11 @@ static void create_exit_at(QDict * exit_at_entry) {
         }
 }
 
-static void load_symbolize_at_pc(QList* sym_list) {
-
-        QListEntry *symbolize_at_pc;
-        QLIST_FOREACH_ENTRY(sym_list, symbolize_at_pc) {
-        
-                if (symbolize_at_pc_array == NULL) symbolize_at_pc_array = g_ptr_array_new_with_free_func(g_free);
-                
-                SymbolizeAtPcArray *r = g_new0(SymbolizeAtPcArray, 1);
-                assert(qobject_type(symbolize_at_pc->value) == QTYPE_QSTRING);
-
-                r->pc = strtol(
-                        qstring_get_str(qobject_to(QString, symbolize_at_pc->value)),
-                        NULL,
-                        0);
-
-                g_ptr_array_add(symbolize_at_pc_array, r);
-
-                is_symbolize_at_pc |= true;
-
-                qemu_log_mask(LOG_CONCOLIC_REPLAY,
-                        "[%s] symbolize_at_pc: 0x%x \n", __func__, r->pc);
-        }  
-
-}
-
 
 static void print_configuration(void){
-        /* patch functions */
         GHashTableIter iter;
         uint32_t addr_iter;
         const char* func_name = NULL;
-        g_hash_table_iter_init(&iter, patched_func_htable);
         uint32_t cnt = 0;
 
         qemu_log_mask(LOG_CONCOLIC_REPLAY,
@@ -509,15 +450,6 @@ static void print_configuration(void){
                 cnt++;
         }
 
-        cnt = 0;
-        qemu_log_mask(LOG_CONCOLIC_REPLAY,
-        "[%s] --------------------------patch function----------------------------\n", __func__);
-
-        while (g_hash_table_iter_next(&iter, (gpointer)&addr_iter, (gpointer)&func_name)) {
-                qemu_log_mask(LOG_CONCOLIC_REPLAY,
-                "%s: [%d] addr: 0x%x (patched func name): %s \n", __func__, cnt, addr_iter, func_name? func_name : "unknown");
-                cnt++;
-        } 
         cnt = 0;
         qemu_log_mask(LOG_CONCOLIC_REPLAY,
                 "%s: --------------------------exit_at function----------------------------\n", __func__);
@@ -606,7 +538,7 @@ static THISCPU *create_cpu(MachineState * ms, QDict *conf){
         cpuu->env.regs[15] = entrypoint & (~1);
         cpuu->env.thumb = (entrypoint & 1) == 1 ? 1 : 0;
 
-        assert(return_reg_index_by_name("r0") == 0 && return_reg_index_by_name("R0") == 0 && return_reg_index_by_name("XXX") == -1);
+        assert(hook_reg_index("r0") == 0 && hook_reg_index("R0") == 0 && hook_reg_index("XXX") == -1);
         
         if (qdict_haskey(conf, "init_state")) {
                 QList *init_reg_entries = qobject_to(QList, qdict_get(conf, "init_state"));
@@ -621,7 +553,7 @@ static THISCPU *create_cpu(MachineState * ms, QDict *conf){
                         NULL,
                         0);
 
-                        int reg_idx = return_reg_index_by_name(qdict_entry->key);
+                        int reg_idx = hook_reg_index(qdict_entry->key);
                         
                         if ( reg_idx != -1) {
                                 qemu_log_mask(LOG_CONCOLIC_REPLAY, "[%s] init reg(%s) with value(0x%x), idx: %d \n",
@@ -648,6 +580,7 @@ static void concolic_machine_init(MachineState *machine)
         kernel_filename = machine->kernel_filename;
 
         conf = load_configuration(kernel_filename);
+        hook_load_config(conf, kernel_filename);        /* "symbols" and "patch" */
 
         if (qdict_haskey(conf, "aflPanicAddr")) {
                 QDICT_ASSERT_KEY_TYPE(conf, "aflPanicAddr", QTYPE_QSTRING);
@@ -674,12 +607,6 @@ static void concolic_machine_init(MachineState *machine)
                         QLIST_FOREACH_ENTRY(mmio_entries, mmio_entry) {
                                 configure_mmio(qobject_to(QDict, qlist_entry_obj(mmio_entry)));
                         }
-                }else if (!strcmp(entry->key, "patch")) {
-                        QList * patches = qobject_to(QList, entry->value);
-                        QListEntry *patch;
-                        QLIST_FOREACH_ENTRY(patches, patch) {
-                                create_patch(qobject_to(QDict, qlist_entry_obj(patch)));
-                        }
                 }else if (!strcmp(entry->key, "exit_at")) {
                         QList * exit_list = qobject_to(QList, entry->value);
                         QListEntry *exit_entry;
@@ -688,8 +615,6 @@ static void concolic_machine_init(MachineState *machine)
                         }
                 }else if (!strcmp(entry->key, "interrupt_firing")){
                         configure_interrupt_firing_strategy(qobject_to(QDict, entry->value));
-                }else if (!strcmp(entry->key, "symbolize_at_pc")) {
-                        load_symbolize_at_pc(qobject_to(QList, entry->value));
                 }
 
                 entry = qdict_next(conf, entry);
@@ -698,12 +623,12 @@ static void concolic_machine_init(MachineState *machine)
         print_configuration();
         assert(replayFile && "specify an input file");
         
-        /* only one part can be symbolizable */
-        if (is_symbolize_at_pc && is_symbolize_at_mmio) 
-                is_symbolize_at_mmio = false;
-
-        /* Initialize the symbolic backend */ 
-        if (is_symbolize_at_mmio || is_symbolize_at_pc) _sym_initialize();
+        /* Input bytes turn symbolic where they enter: MMIO reads and hooks. */
+        if (!getenv("SYMCC_MEMORY_INPUT")) {
+                error_report("concolic-executor needs SYMCC_MEMORY_INPUT=1");
+                exit(EXIT_FAILURE);
+        }
+        _sym_initialize();
 
         /* create a file for coverage */
         if (covFile) {

@@ -343,15 +343,6 @@ static void *sym_load_guest_internal(CPUArchState *env,
     }else{
         host_addr = tlb_vaddr_to_host(env, addr, MMU_DATA_LOAD, mmu_idx);
         memory_expr = _sym_read_memory((uint8_t*)host_addr, load_length, true);
-
-        /* symbolize a mem read at a specified pc */
-        if (memory_expr == NULL && symbolize_at_pc_array && array_contain_addr(symbolize_at_pc_array, get_pc(env))) {
-            symcc_make_symbolic(host_addr, load_length);
-            memory_expr = _sym_read_memory((uint8_t*)host_addr, load_length, true);
-            qemu_log_mask(LOG_CONCOLIC_REPLAY,
-            "[%s] memory_expr %s of mem read 0x%x at 0x%x\n", __func__, memory_expr? _sym_expr_to_string(memory_expr) : "null",
-            (uint32_t)addr, (uint32_t)get_pc(env));
-        }
     }
 
     if (load_length == result_length || memory_expr == NULL)

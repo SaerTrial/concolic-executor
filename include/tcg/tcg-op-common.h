@@ -14,7 +14,7 @@
 
 
 /* record and replay project */
-typedef uint32_t (*ArchHelper)(CPUState *);
+typedef uint32_t (*ArchHelper)(CPUState *, uint64_t pc);
 void gen_aflBBlock(ArchHelper func, CPUState* cpu, uint64_t pc);
 
 
