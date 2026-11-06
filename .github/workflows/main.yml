@@ -15,7 +15,7 @@ jobs:
         llvm_versions: [14, 15]
     steps:
     - uses: actions/checkout@v4
-    - run: git submodule update --init --recursive subprojects/symcc-rt
+    - run: git submodule update --init --recursive subprojects/symcc-rt hooks
     # build and test with multiple LLVM versions
     - run: docker build --build-arg LLVM_VERSION=${{ matrix.llvm_versions }} -t symqemu .
     # Every suite except qtest: the qtests boot stock QEMU machines, and the

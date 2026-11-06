@@ -3731,12 +3731,13 @@ void gen_aflBBlock(ArchHelper func, CPUState* cpu, uint64_t pc){
     //     tcgv_ptr_temp(tcg_cpu)
     // };
 
-    info.flags = TCG_CALL_NO_RWG;
+    /* No call flags: the helper reads and writes guest registers (hooks). */
+    info.flags = 0;
     info.func = func;
-    // uint32_t (*)(ptr)
-    info.typemask = dh_typemask(i32, 0) | dh_typemask(ptr, 1);
-    // tcg_gen_callN(func, &info, tcgv_i32_temp(ret), (TCGTemp**)args);
-    tcg_gen_call1(func, &info, tcgv_i32_temp(ret), tcgv_ptr_temp(tcg_cpu));
+    /* uint32_t (*)(CPUState *, uint64_t pc): regs[15] alone is stale once blocks chain */
+    info.typemask = dh_typemask(i32, 0) | dh_typemask(ptr, 1) | dh_typemask(i64, 2);
+    tcg_gen_call2(func, &info, tcgv_i32_temp(ret), tcgv_ptr_temp(tcg_cpu),
+                  tcgv_i64_temp(tcg_constant_i64(pc)));
     tcg_gen_brcondi_i32(TCG_COND_EQ, ret, 0, no_patch);
     tcg_temp_free_ptr(tcg_cpu);
     tcg_temp_free_i32(ret);

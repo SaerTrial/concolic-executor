@@ -1314,7 +1314,7 @@ static void iommu_memory_region_initfn(Object *obj)
 bool getFuzz(uint8_t *buf, uint32_t size);
 static bool is_allocated = false;
 target_long* g_sym_expr = NULL;
-extern bool is_symbolize_at_mmio;
+extern uint32_t fuzz_cursor;
 
 static uint64_t symbolize_mem_read(void *opaque, hwaddr addr,
                                     unsigned size)
@@ -1326,9 +1326,11 @@ static uint64_t symbolize_mem_read(void *opaque, hwaddr addr,
         is_allocated = true;
     }
 
+    /* Name each byte by its input-file offset, as hooks do, so solved bytes
+     * land where this read takes them from on replay. */
+    uint32_t offset = fuzz_cursor;
     getFuzz((uint8_t *)g_sym_expr, size);
-
-    if (is_symbolize_at_mmio) symcc_make_symbolic(g_sym_expr, size);        
+    _sym_make_symbolic(g_sym_expr, size, offset);
 
     assert (g_sym_expr != NULL);
     return *g_sym_expr;
