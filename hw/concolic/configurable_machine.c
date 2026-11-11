@@ -84,14 +84,16 @@ bool getFuzz(uint8_t *buf, uint32_t size) {
                 input_already_given = true;
         }
 
+        /* Callers log what they took: the "input[...]" lines (hook_log_input). */
         if(size && fuzz_cursor + size <= fuzz_size) {
-                qemu_log_mask(LOG_CONCOLIC_REPLAY, "[NATIVE FUZZ] Returning %d fuzz bytes\n", size); 
                 memcpy(buf, &fuzz[fuzz_cursor], size);
                 fuzz_cursor += size;
                 return true;
         }
         else {
-                qemu_log_mask(LOG_CONCOLIC_REPLAY, "[NATIVE FUZZ] Running out of inputs \n"); 
+                qemu_log_mask(LOG_CONCOLIC_REPLAY,
+                              "input runs out: a %u-byte read at offset %u goes past the end of the %u-byte input; the run ends\n",
+                              size, fuzz_cursor, fuzz_size);
                 free(fuzz);
                 _exit(0);
         }
