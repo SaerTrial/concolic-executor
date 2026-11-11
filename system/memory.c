@@ -35,6 +35,7 @@
 #include "migration/vmstate.h"
 #include "exec/address-spaces.h"
 #include "hw/concolic/utils/mem.h"
+#include "hooks/hook_engine.h"
 
 //#define DEBUG_UNASSIGNED
 
@@ -1331,6 +1332,8 @@ static uint64_t symbolize_mem_read(void *opaque, hwaddr addr,
     uint32_t offset = fuzz_cursor;
     getFuzz((uint8_t *)g_sym_expr, size);
     _sym_make_symbolic(g_sym_expr, size, offset);
+    hook_log_input(offset, size, "MMIO 0x%08" HWADDR_PRIx " = 0x%0*" PRIx64,
+                   addr, (int)size * 2, ldn_he_p(g_sym_expr, size));
 
     assert (g_sym_expr != NULL);
     return *g_sym_expr;
