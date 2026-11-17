@@ -1331,7 +1331,9 @@ static uint64_t symbolize_mem_read(void *opaque, hwaddr addr,
      * land where this read takes them from on replay. */
     uint32_t offset = fuzz_cursor;
     getFuzz((uint8_t *)g_sym_expr, size);
-    _sym_make_symbolic(g_sym_expr, size, offset);
+    if (!hook_booting()) {      /* bytes from boot.input stay plain values */
+        _sym_make_symbolic(g_sym_expr, size, offset);
+    }
     hook_log_input(offset, size, "MMIO 0x%08" HWADDR_PRIx " = 0x%0*" PRIx64,
                    addr, (int)size * 2, ldn_he_p(g_sym_expr, size));
 
