@@ -8082,6 +8082,8 @@ void armv7m_nvic_set_pending(NVICState *s, int irq, bool secure);
 extern GHashTable *exit_at_htable;
 extern uint32_t bb_cnt;
 extern unsigned long aflPanicAddr;
+extern uint32_t fuzz_cursor;
+void switch_to_fuzz_input(void);
 
 /* Runs at each block start; returns 1 when a hook ran and PC now points elsewhere. */
 static uint32_t arm_helper_func(CPUState *cpu, uint64_t pc){
@@ -8089,8 +8091,22 @@ static uint32_t arm_helper_func(CPUState *cpu, uint64_t pc){
     void* element = NULL;
 
     env->regs[15] = pc;     /* exact even if blocks are ever chained (now disabled) */
-    qemu_log_mask(LOG_CONCOLIC_REPLAY, "[%s] executing at 0x%x ... \n", __func__, (uint32_t)pc); 
-    
+    qemu_log_mask(LOG_CONCOLIC_REPLAY, "[%s] executing at 0x%x ... \n", __func__, (uint32_t)pc);
+
+    switch (hook_boot_block(pc, fuzz_cursor)) {     /* the "boot" section */
+    case HOOK_BOOT_FAILED:
+        _exit(0);                   /* this run did not boot */
+    case HOOK_BOOT_SWITCH:
+        switch_to_fuzz_input();     /* symbolic input starts here */
+        break;
+    case HOOK_BOOT_GO:
+        break;
+    }
+    if (hook_booting() && (aflPanicAddr == pc ||
+                           (exit_at_htable && g_hash_table_contains(exit_at_htable, (gpointer)pc)))) {
+        hook_boot_fail("ended the run at 0x%08x before the boot target", (uint32_t)pc);
+    }
+
     if (aflPanicAddr == pc) {
         qemu_log_mask(LOG_CONCOLIC_REPLAY, "[%s] crashing at 0x%x ...\n", __func__, (uint32_t)pc); 
         exit(0);

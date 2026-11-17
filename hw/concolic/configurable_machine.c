@@ -47,14 +47,17 @@ static bool input_already_given = false;
 unsigned long aflPanicAddr = (unsigned long)-1;
 
 bool getFuzz(uint8_t *buf, uint32_t size);
+void switch_to_fuzz_input(void);
 static void loadFuzz(void);
 
 void loadFuzz(void) {
+        /* Before boot.target, reads are served from boot.input. */
+        const char *path = hook_booting() ? hook_boot_input() : replayFile;
         FILE *fp;
-        
-        fp = fopen(replayFile, "rb");
+
+        fp = fopen(path, "rb");
         if(!fp) {
-                perror(replayFile);
+                perror(path);
                 exit(1);
         }
 
@@ -75,6 +78,17 @@ void loadFuzz(void) {
         fclose(fp);
 }
 
+/*
+ * The boot target is reached: drop the bytes of boot.input. The next read
+ * loads the real input file, so it takes input[0].
+ */
+void switch_to_fuzz_input(void) {
+        free(fuzz);
+        fuzz = NULL;
+        fuzz_size = 0;
+        fuzz_cursor = 0;
+        input_already_given = false;
+}
 
 /* get fuzzing inputs */
 bool getFuzz(uint8_t *buf, uint32_t size) {
@@ -91,6 +105,9 @@ bool getFuzz(uint8_t *buf, uint32_t size) {
                 return true;
         }
         else {
+                if (hook_booting()) {
+                        hook_boot_fail("(%u bytes) ran out before the boot target", fuzz_size);
+                }
                 qemu_log_mask(LOG_CONCOLIC_REPLAY,
                               "input runs out: a %u-byte read at offset %u goes past the end of the %u-byte input; the run ends\n",
                               size, fuzz_cursor, fuzz_size);
